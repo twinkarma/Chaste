@@ -1,6 +1,6 @@
 # Configuration
 
-"""Copyright (c) 2005-2018, University of Oxford.
+"""Copyright (c) 2005-2019, University of Oxford.
 All rights reserved.
 
 University of Oxford means the Chancellor, Masters and Scholars of the
@@ -46,6 +46,9 @@ ubuntu_ver = map(int, ubuntu_ver.split('.')[0:2])
 if os.path.isdir('/home/bob/petsc-3.6.4'):
     petsc_ver = [3,6]
     petsc_path = '/home/bob/petsc-3.6.4'
+elif os.path.isdir('/home/bob/petsc-3.7.7'):
+    petsc_ver = [3,7]
+    petsc_path = '/home/bob/petsc-3.7.7'
 else:
     petsc_ver = [3,1]
     petsc_path = '/home/bob/petsc-3.1-p8/'
