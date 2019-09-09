@@ -40,6 +40,8 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "CheckpointArchiveTypes.hpp"
 #include "FarhadifarForce.hpp"
+#include "CellsGenerator.hpp"
+#include "FixedG1GenerationalCellCycleModel.hpp"
 #include "WildTypeCellMutationState.hpp"
 #include "DifferentiatedCellProliferativeType.hpp"
 #include "AbstractCellBasedTestSuite.hpp"
@@ -48,12 +50,16 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "FileComparison.hpp"
 #include "SimpleTargetAreaModifier.hpp"
 #include "OffLatticeSimulation.hpp"
-
+#include "HoneycombMeshGenerator.hpp"
+#include "HoneycombVertexMeshGenerator.hpp"
+#include "VertexBasedCellPopulation.hpp"
 #include "PetscSetupAndFinalize.hpp"
 
 #include "omp.h"
 #include "FarhadifarForceOMP.hpp"
 
+#include <chrono>
+#include <ctime>
 class TestForcesUsingOMP : public AbstractCellBasedTestSuite
 {
 public:
@@ -216,6 +222,101 @@ public:
             TS_ASSERT_DELTA(applied_force_1[1], 6.76, 1e-10);
         }
         for (unsigned int i=0; i<applied_forces.size(); ++i)
+        {
+            TS_ASSERT_DELTA(applied_forces[i][0], applied_forces_OMP[i][0], 1e-12);
+            TS_ASSERT_DELTA(applied_forces[i][1], applied_forces_OMP[i][1], 1e-12);
+        }
+    }
+
+    void TestFarhadifarForceOMPPopulationSpeedUp()
+    {
+        const unsigned int n_x_cells = 100;
+        const unsigned int n_y_cells = 100;
+        std::vector<c_vector<double,2> > applied_force;
+        std::vector<c_vector<double,2> > applied_force_OMP;
+        double wall_time, cpu_time, wall_time_OMP, cpu_time_OMP;
+        unsigned int n_population_nodes;
+
+        std::vector<c_vector<double, 2> > applied_forces;
+        std::vector<c_vector<double, 2> > applied_forces_OMP;
+
+        {
+
+            HoneycombVertexMeshGenerator generator(n_x_cells, n_y_cells);
+            MutableVertexMesh<2,2>* vertex_mesh = generator.GetMesh();
+            // Get a cell population
+            CellsGenerator<FixedG1GenerationalCellCycleModel, 2> cells_generator;
+            std::vector<CellPtr> cells;
+            cells_generator.GenerateBasic(cells, vertex_mesh->GetNumElements(), std::vector<unsigned>());
+            VertexBasedCellPopulation<2> cell_population(*vertex_mesh, cells);
+            n_population_nodes = vertex_mesh->GetNumNodes();
+            // Set the birth time to -5 such that the target area modifier assigns mature cell target areas
+            for (AbstractCellPopulation<2>::Iterator cell_iter = cell_population.Begin();
+                    cell_iter != cell_population.End();
+                    ++cell_iter)
+            {
+                cell_iter->SetBirthTime(-5.0);
+            }
+
+            MAKE_PTR(SimpleTargetAreaModifier<2>,p_growth_modifier);
+            p_growth_modifier->UpdateTargetAreas(cell_population);
+
+            // Now let's make a FarhadifarForce and apply it to the population
+            FarhadifarForce<2> force;
+            std::clock_t c_start = std::clock();
+            auto t_start = std::chrono::high_resolution_clock::now();
+            force.AddForceContribution(cell_population);
+            std::clock_t c_end = std::clock();
+            auto t_end = std::chrono::high_resolution_clock::now();
+            for (unsigned int i=0; i<n_population_nodes; ++i)
+            {
+                applied_forces.push_back(cell_population.rGetMesh().GetNode(i)->rGetAppliedForce());
+            }
+
+            cpu_time = 1000.0*(c_end-c_start)/CLOCKS_PER_SEC;
+            wall_time = std::chrono::duration_cast<std::chrono::milliseconds>(t_end - t_start).count();
+        }
+
+        {
+            HoneycombVertexMeshGenerator generator(n_x_cells, n_y_cells);
+            MutableVertexMesh<2,2>* vertex_mesh = generator.GetMesh();
+            // Get a cell population
+            CellsGenerator<FixedG1GenerationalCellCycleModel, 2> cells_generator;
+            std::vector<CellPtr> cells;
+            cells_generator.GenerateBasic(cells, vertex_mesh->GetNumElements(), std::vector<unsigned>());
+            VertexBasedCellPopulation<2> cell_population(*vertex_mesh, cells);
+            n_population_nodes = vertex_mesh->GetNumNodes();
+            // Set the birth time to -5 such that the target area modifier assigns mature cell target areas
+            for (AbstractCellPopulation<2>::Iterator cell_iter = cell_population.Begin();
+                    cell_iter != cell_population.End();
+                    ++cell_iter)
+            {
+                cell_iter->SetBirthTime(-5.0);
+            }
+
+            MAKE_PTR(SimpleTargetAreaModifier<2>,p_growth_modifier);
+            p_growth_modifier->UpdateTargetAreas(cell_population);
+
+            // Now let's make a FarhadifarForce and apply it to the population
+            FarhadifarForceOMP<2> force;
+            std::clock_t c_start = std::clock();
+            auto t_start = std::chrono::high_resolution_clock::now();
+            force.AddForceContribution(cell_population);
+            std::clock_t c_end = std::clock();
+            auto t_end = std::chrono::high_resolution_clock::now();
+            for (unsigned int i=0; i<n_population_nodes; ++i)
+            {
+                applied_forces_OMP.push_back(cell_population.rGetMesh().GetNode(i)->rGetAppliedForce());
+            }
+
+            cpu_time_OMP = 1000.0*(c_end-c_start)/CLOCKS_PER_SEC;
+            wall_time_OMP = std::chrono::duration_cast<std::chrono::milliseconds>(t_end - t_start).count();
+        }
+        std::cout<<"CPU time, ms"<<std::endl;
+        std::cout<<"In serial: "<<cpu_time<<" ; Using OMP: "<<cpu_time_OMP<<std::endl;
+        std::cout<<"Wall time, ms"<<std::endl;
+        std::cout<<"In serial: "<<wall_time<<" ; Using OMP: "<<wall_time_OMP<<std::endl;
+        for (unsigned int i=0; i<applied_forces_OMP.size(); ++i)
         {
             TS_ASSERT_DELTA(applied_forces[i][0], applied_forces_OMP[i][0], 1e-12);
             TS_ASSERT_DELTA(applied_forces[i][1], applied_forces_OMP[i][1], 1e-12);
