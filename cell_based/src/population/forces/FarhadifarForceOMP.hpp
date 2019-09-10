@@ -55,6 +55,7 @@ template<unsigned DIM>
 class FarhadifarForceOMP : public AbstractForce<DIM>
 {
 friend class TestForces;
+friend class TestForcesOMP;
 
 private:
 
