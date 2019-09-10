@@ -379,7 +379,7 @@ unsigned MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::DivideElementAlongGivenAxis(
     //Edge ADD & DELETE operations are held as it will be
     // compressed into a single DIVIDE operation
     this->mEdges.HoldEdgeOperations();
-    std::vector<long> edgeIds;
+    std::vector<unsigned int> edgeIds;
     for (unsigned i = 0; i < pElement->GetNumEdges(); i++)
     {
         edgeIds.push_back(pElement->GetEdge(i)->GetIndex());
@@ -420,6 +420,9 @@ unsigned MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::DivideElementAlongGivenAxis(
     std::vector<unsigned> division_node_global_indices;
     unsigned nodes_added = 0;
 
+    //Keeps track of elements (first) whose edge (second) had been split
+    std::vector<std::pair<VertexElement<ELEMENT_DIM, SPACE_DIM>*, unsigned int> > edge_split_pairs;
+    std::vector<double> relative_new_node;
     // Find the intersections between the axis of division and the element edges
     for (unsigned i=0; i<intersecting_nodes.size(); i++)
     {
@@ -514,14 +517,16 @@ unsigned MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::DivideElementAlongGivenAxis(
                               elems_containing_node_B.end(),
                               std::inserter(shared_elements, shared_elements.begin()));
 
-        // Iterate over common elements
+        // Iterate over common elements, including the element to be divided
         unsigned node_A_index = p_node_A->GetIndex();
         unsigned node_B_index = p_node_B->GetIndex();
+        bool original_element = false;
         for (std::set<unsigned>::iterator iter = shared_elements.begin();
              iter != shared_elements.end();
              ++iter)
         {
             VertexElement<ELEMENT_DIM, SPACE_DIM>* p_element = this->GetElement(*iter);
+            original_element = p_element->GetIndex()==pElement->GetIndex();
 
             // Find which node has the lower local index in this element
             unsigned local_indexA = p_element->GetNodeLocalIndex(node_A_index);
@@ -546,8 +551,27 @@ unsigned MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::DivideElementAlongGivenAxis(
                 index = local_indexA;
             }
 
+            if (!original_element)
+            {
+                const unsigned int n_edges = p_element->GetNumEdges();
+                const unsigned int nextIndex = (index+1)%n_edges;
+                auto prev_node = p_element->GetNode(index)->rGetLocation();
+                auto next_node = p_element->GetNode(nextIndex)->rGetLocation();
+                auto curr_node = this->GetNode(new_node_global_index)->rGetLocation();
+                c_vector<double, SPACE_DIM> last_to_next = this->GetVectorFromAtoB(prev_node, next_node);
+                c_vector<double, SPACE_DIM> last_to_curr = this->GetVectorFromAtoB(prev_node, curr_node);
+                double old_distance = norm_2(last_to_next);
+                double prev_curr_distance = norm_2(last_to_curr);
+                if (old_distance<prev_curr_distance)
+                {
+                    EXCEPTION("New node in split edge is not between a pair old nodes");
+                }
+                double theta = prev_curr_distance/old_distance;
+                relative_new_node.push_back(theta);
+                edge_split_pairs.push_back(std::pair<VertexElement<ELEMENT_DIM,SPACE_DIM>*, unsigned int>(p_element,index));
+            }
             // Add new node to this element
-            this->GetElement(*iter)->AddNode(this->GetNode(new_node_global_index), index);
+            p_element->AddNode(this->GetNode(new_node_global_index), index);
         }
 
         // Store index of new node
@@ -570,100 +594,8 @@ unsigned MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::DivideElementAlongGivenAxis(
     this->mEdges.ResumeEdgeOperations();
 
     this->RecordCellDivideOperation(edgeIds, pElement, this->mElements[new_element_index]);
-
+    this->RecordEdgeSplitOperation(edge_split_pairs, relative_new_node);
     return new_element_index;
-}
-
-template<unsigned ELEMENT_DIM, unsigned SPACE_DIM>
-void MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::RecordCellDivideOperation(std::vector<long>& oldIds, VertexElement<ELEMENT_DIM,SPACE_DIM>* pElement1, VertexElement<ELEMENT_DIM,SPACE_DIM>* pElement2)
-{
-    auto edgeReMapping1 = BuildEdgeDivideIdDifferenceInfo(oldIds, pElement1);
-    auto edgeReMapping2 = BuildEdgeDivideIdDifferenceInfo(oldIds, pElement2);
-
-    this->mEdges.InsertCellDivideOperation(pElement1->GetIndex(), pElement2->GetIndex(), edgeReMapping1, edgeReMapping2);
-}
-
-template<unsigned ELEMENT_DIM, unsigned SPACE_DIM>
-EdgeRemapInfo* MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::BuildEdgeDivideIdDifferenceInfo(std::vector<long> &oldIds, VertexElement<ELEMENT_DIM,SPACE_DIM>* pElement)
-{
-    // Build a reverse index map
-    std::map<long, unsigned > oldIdsMap;
-    for (unsigned i= 0; i < oldIds.size(); i++)
-    {
-        auto id = oldIds[i];
-        oldIdsMap[id] = i;
-    }
-
-    std::vector<long> newEdges;
-    std::vector<unsigned char> edgeStatus;
-
-    int newEdgesCount = 0;
-    // Element 1 edge division re-mapping
-    for (unsigned i = 0; i < pElement->GetNumEdges(); i++)
-    {
-        // Fills the id vector with either the index before cell division or
-        // -1 if index did not exist before
-        auto id = pElement->GetEdge(i)->GetIndex();
-        auto id_itt = oldIdsMap.find(id);
-        if (id_itt != oldIdsMap.end())
-        {
-            newEdges.push_back(id_itt->second);
-            edgeStatus.push_back(0);
-        }
-        else
-        {
-            newEdges.push_back(-1);
-            edgeStatus.push_back(2);
-            newEdgesCount++;
-        }
-    }
-
-    // Find the middle index of the new edges
-    int numOldEdges = oldIds.size();
-    int numEdges = newEdges.size();
-    for (unsigned i = 0; i < newEdges.size(); i++)
-    {
-        int prevIndex = WrapIndex((int)i - 1, numEdges);
-        int nextIndex = WrapIndex((int)i +1, numEdges);
-
-        if (newEdges[i] == -1 && newEdges[prevIndex] == -1 && newEdges[nextIndex] == -1)
-        {
-            int prev2Index = WrapIndex((int)i - 2, numEdges);
-            int next2Index = WrapIndex((int)i + 2, numEdges);
-
-            assert(newEdges[prev2Index] != -1 && newEdges[next2Index] != -1);
-            newEdges[prevIndex] = WrapIndex(newEdges[prev2Index] +1, numOldEdges);
-            newEdges[nextIndex] = WrapIndex(newEdges[next2Index] -1, numOldEdges);
-            edgeStatus[prevIndex] = 1;
-            edgeStatus[nextIndex] = 1;
-
-            break;
-        }
-    }
-
-    // We should always have 3 new edges with 2 divide and 1 new
-    assert(newEdgesCount == 3);
-
-    return new EdgeRemapInfo(newEdges, edgeStatus);
-}
-
-template<unsigned int ELEMENT_DIM, unsigned int SPACE_DIM>
-int MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::WrapIndex(int index, int maxSize)
-{
-    int out_index = index;
-
-    if (index < 0)
-    {
-        out_index = maxSize + index;
-    }
-    else if (index >= maxSize)
-    {
-        out_index = index - maxSize;
-    }
-
-    assert(out_index > -1 && out_index < maxSize);
-
-    return out_index;
 }
 
 template<unsigned ELEMENT_DIM, unsigned SPACE_DIM>
@@ -1582,7 +1514,16 @@ void MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::PerformNodeMerge(Node<SPACE_DIM>
          */
         if (nodeA_elem_indices.count(*it) != 0)
         {
+            std::vector<unsigned int> edgeIds;
+            for (unsigned i = 0; i < this->mElements[*it]->GetNumEdges(); i++)
+            {
+                edgeIds.push_back(this->mElements[*it]->GetEdge(i)->GetIndex());
+            }
             this->mElements[*it]->DeleteNode(node_B_local_index);
+
+            const unsigned int node_A_local_index = this->mElements[*it]->GetNodeLocalIndex(pNodeA->GetIndex());
+            RecordNodeMergeOperation(edgeIds, this->mElements[*it],
+                                     std::pair<unsigned int, unsigned int>(node_A_local_index, node_B_local_index));
         }
         else
         {
@@ -1669,15 +1610,31 @@ void MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::PerformT1Swap(Node<SPACE_DIM>* p
             unsigned nodeB_local_index = this->mElements[*it]->GetNodeLocalIndex(pNodeB->GetIndex());
             assert(nodeB_local_index < UINT_MAX);
 
+            std::vector<unsigned int> oldIds;
+            for (unsigned int i=0; i<this->mElements[*it]->GetNumEdges(); ++i)
+            {
+                oldIds.push_back(this->mElements[*it]->GetEdge(i)->GetIndex());
+            }
+
             this->mElements[*it]->AddNode(pNodeA, nodeB_local_index);
+
+            this->RecordNewEdgeOperation(oldIds, this->mElements[*it], nodeB_local_index);
         }
         else if (nodeB_elem_indices.find(*it) == nodeB_elem_indices.end())
         {
-            // Do similarly if the element does not contain node B (now D), as in element 4 above
+            // Do similarly if the element does not contain node B (now D), as in element 1 above
             unsigned nodeA_local_index = this->mElements[*it]->GetNodeLocalIndex(pNodeA->GetIndex());
             assert(nodeA_local_index < UINT_MAX);
 
+            std::vector<unsigned int> oldIds;
+            for (unsigned int i=0; i<this->mElements[*it]->GetNumEdges(); ++i)
+            {
+                oldIds.push_back(this->mElements[*it]->GetEdge(i)->GetIndex());
+            }
+
             this->mElements[*it]->AddNode(pNodeB, nodeA_local_index);
+
+            this->RecordNewEdgeOperation(oldIds, this->mElements[*it], nodeA_local_index);
         }
         else
         {
@@ -1694,7 +1651,15 @@ void MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::PerformT1Swap(Node<SPACE_DIM>* p
              * and if nodeA_index > nodeB_index then element 2
              */
             unsigned nodeB_local_index_plus_one = (nodeB_local_index + 1)%(this->mElements[*it]->GetNumNodes());
-
+            /*
+             * T1 swap and subsequent A-B edge shrinkage is recorded as node merging
+             */
+            std::vector<unsigned int> oldIds;
+            for (unsigned int i=0; i<this->mElements[*it]->GetNumEdges(); ++i)
+            {
+                oldIds.push_back(this->mElements[*it]->GetEdge(i)->GetIndex());
+            }
+            std::pair<unsigned int, unsigned int> deleted_node_indices;
             if (nodeA_local_index == nodeB_local_index_plus_one)
             {
                 /*
@@ -1702,6 +1667,8 @@ void MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::PerformT1Swap(Node<SPACE_DIM>* p
                  * nodeB plus one so we are in element 2 so we remove nodeB
                  */
                 this->mElements[*it]->DeleteNode(nodeB_local_index);
+                deleted_node_indices.first = nodeA_local_index;
+                deleted_node_indices.second = nodeB_local_index;
             }
             else
             {
@@ -1711,7 +1678,11 @@ void MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::PerformT1Swap(Node<SPACE_DIM>* p
                  * nodeB minus one so we are in element 4 so we remove nodeA
                  */
                 this->mElements[*it]->DeleteNode(nodeA_local_index);
+                deleted_node_indices.first = nodeB_local_index;
+                deleted_node_indices.second = nodeA_local_index;
             }
+            this->RecordNodeMergeOperation(oldIds, this->mElements[*it],
+                                           deleted_node_indices);
         }
     }
 
@@ -2808,8 +2779,18 @@ void MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::PerformRosetteRankIncrease(Node<
 
         if (hi_rank_elem_indices.count(*it) > 0)
         {
+            //For node merge recording
+            std::vector<unsigned int> oldIds(this->mElements[*it]->GetNumEdges());
+            for (unsigned int i=0; i<oldIds.size(); ++i)
+            {
+                oldIds.push_back(this->mElements[*it]->GetEdge(i)->GetIndex());
+            }
             // Delete lo_rank_node from current element
             this->mElements[*it]->DeleteNode(lo_rank_local_index);
+            //Record edge shrinkage
+            const unsigned int hi_rank_local_index = this->mElements[*it]->GetNodeLocalIndex(hi_rank_index);
+            this->RecordNodeMergeOperation(oldIds, this->mElements[*it],
+                                           std::pair<unsigned int, unsigned int>(hi_rank_local_index, lo_rank_local_index));
         }
         else
         {
@@ -3322,6 +3303,259 @@ c_vector<double, 2> MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::WidenEdgeOrCorrec
     return intersection;
 }
 
+template<unsigned ELEMENT_DIM, unsigned SPACE_DIM>
+void MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::RecordNodeMergeOperation(const std::vector<unsigned int> oldIds,
+                                                                         VertexElement<ELEMENT_DIM,SPACE_DIM>* pElement,
+                                                                         const std::pair<unsigned int, unsigned int> merged_nodes_pair)
+{
+    const unsigned int element_index = pElement->GetIndex();
+    const unsigned int elementNumEdges = pElement->GetNumEdges();
+    std::vector<long int> edge_mapping(elementNumEdges,-1);
+    std::vector<unsigned int> edge_status(elementNumEdges,0);
+
+    //Marking unaffacted edges
+    for (unsigned int i=0; i<oldIds.size(); ++i)
+    {
+        long index = pElement->GetLocalEdgeIndex(this->mEdges[oldIds[i]]);
+        if (index>=0)
+        {
+            edge_mapping[index] = i;
+            edge_status[index] = 0;
+        }
+    }
+
+    //Checking whether the deleted node is upper or lower node
+    const unsigned int node_A_index = merged_nodes_pair.first;
+    const unsigned int node_B_index = merged_nodes_pair.second;
+    const bool is_B_upper = node_B_index>node_A_index;
+    unsigned int lower_node = node_A_index;
+    unsigned int upper_node = node_B_index;
+    if (!is_B_upper)
+    {
+        lower_node = node_B_index;
+        upper_node = node_A_index;
+    }
+    //Previous edge denotes the edge below the lower node index
+    //and nextEdge denotes the edge above the upper node index
+    unsigned int prevEdge = 0;
+    if (upper_node == 0)
+    {
+        prevEdge = elementNumEdges - 2;
+    }
+    else if (upper_node == 1)
+    {
+        prevEdge = elementNumEdges - 1;
+    }
+    else
+    {
+        prevEdge = upper_node - 2;
+    }
+    const unsigned int nextEdge = (prevEdge+1)%elementNumEdges;
+
+    //Marking edges below and above the deleted edge
+    edge_status[prevEdge] = 3;
+    edge_status[nextEdge] = 3;
+    //The edge below node A is in the old element if node B is upper node, and marked with status 0 in the loop above
+    //Because node deletion during node merging also removes the pair of edges associated to it,
+    //we need to make sure the edges associated with nodes about to be merges correctly map to the old element edges
+    if (is_B_upper)
+    {
+        edge_mapping[nextEdge] = node_B_index;
+    }
+    else
+    {
+        if (lower_node==0)
+        {
+            edge_mapping[prevEdge] = elementNumEdges;
+        }
+        else
+        {
+            edge_mapping[prevEdge] = lower_node-1;
+        }
+    }
+    //Sanity check
+    for (unsigned int i=0; i<edge_mapping.size(); ++i)
+        assert(edge_mapping[i]>=0);
+
+    EdgeRemapInfo* remap_info = new EdgeRemapInfo(edge_mapping, edge_status);
+    this->mEdges.InsertNodeMergeOperation(element_index, remap_info);
+}
+
+template<unsigned ELEMENT_DIM, unsigned SPACE_DIM>
+void MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::RecordEdgeSplitOperation(const std::vector<std::pair<VertexElement<ELEMENT_DIM,SPACE_DIM>*, unsigned int> > edge_split_pairs,
+                                                                         const std::vector<double> relative_new_node)
+{
+    for (unsigned int i=0; i<edge_split_pairs.size(); ++i)
+    {
+        const unsigned int element_index = edge_split_pairs[i].first->GetIndex();
+        const unsigned int elementNumEdges = edge_split_pairs[i].first->GetNumEdges();
+        const unsigned int localEdgeIndex = edge_split_pairs[i].second;
+        std::vector<double> thetas(elementNumEdges);
+        std::vector<long int> edge_mapping(elementNumEdges);
+        std::vector<unsigned int> edge_status(elementNumEdges,0);
+        const unsigned int split_1 = localEdgeIndex;
+        const unsigned int split_2 = localEdgeIndex+1;
+        edge_status[split_1] = 1;
+        edge_status[split_2] = 1;
+        thetas[split_1] = relative_new_node[i];
+        thetas[split_2] = 1.0-relative_new_node[i];
+        unsigned int count = 0;
+        for (unsigned int i=0; i < elementNumEdges; ++i)
+        {
+            edge_mapping[i] = i - count;
+            if (edge_status[i]==1)
+                count = 1;
+        }
+        EdgeRemapInfo* newEdges = new EdgeRemapInfo(edge_mapping, edge_status);
+        newEdges->SetSplitProportions(thetas);
+
+        this->mEdges.InsertEdgeSplitOperation(element_index, newEdges);
+    }
+}
+
+template<unsigned ELEMENT_DIM, unsigned SPACE_DIM>
+void MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::RecordCellDivideOperation(const std::vector<unsigned int>& oldIds,
+                                                                          VertexElement<ELEMENT_DIM,SPACE_DIM>* pElement1,
+                                                                          VertexElement<ELEMENT_DIM,SPACE_DIM>* pElement2)
+{
+    const unsigned int n_edges_1 = pElement1->GetNumEdges();
+    const unsigned int n_edges_2 = pElement2->GetNumEdges();
+    std::vector<long> edge_mapping_1(n_edges_1,-2);
+    std::vector<long> edge_mapping_2(n_edges_2,-2);
+    std::vector<unsigned int> edge_status_1(n_edges_1);
+    std::vector<unsigned int> edge_status_2(n_edges_2);
+
+    std::vector<unsigned int> old_split_edges(oldIds.size());
+    //Keeps track of parent edges that are NOT retained in daughter cells
+    for (unsigned int i=0; i<oldIds.size(); ++i)
+        old_split_edges[i] = i;
+    unsigned int counter_1 = 0;
+    unsigned int counter_2 = 0;
+    //First find parent edges that correspond directly to daughter cells' edges
+    //At the end of the loop, old_split_edges contains parent edge indices that are split
+    for (unsigned int i=0; i<oldIds.size(); ++i)
+    {
+        //Index of parent edge corresponding to daughter cell's edge.
+        //-1 if not found.
+        long index_1 = pElement1->GetLocalEdgeIndex(this->mEdges[oldIds[i]]);
+        long index_2 = pElement2->GetLocalEdgeIndex(this->mEdges[oldIds[i]]);
+        auto position = std::find(old_split_edges.begin(), old_split_edges.end(),i);
+        //Modify edge map and status
+        if (index_1>=0)
+        {
+            edge_mapping_1[index_1] = i;
+            edge_status_1[index_1] = 0;
+            old_split_edges.erase(position);
+            counter_1++;
+        }
+        if (index_2>=0)
+        {
+            edge_mapping_2[index_2] = i;
+            edge_status_2[index_2] = 0;
+            old_split_edges.erase(position);
+            counter_2++;
+        }
+    }
+    //Two parent edges are split
+    assert(old_split_edges.size()==2);
+    //Three edges in daughter cells are unmapped
+    assert(counter_1==n_edges_1-3);
+    assert(counter_2==n_edges_2-3);
+    //Edge split proportions.
+    std::vector<double> thetas_1(n_edges_1);
+    std::vector<double> thetas_2(n_edges_2);
+    //Go through unmapped edges of daughter cell to find a mapping between parent split edge and
+    //daughter edge
+    for (unsigned int i=0; i<n_edges_1; ++i)
+    {
+        if (edge_mapping_1[i]==-2)
+        {
+            auto node_1 = pElement1->GetEdge(i)->GetNode(0);
+            auto node_2 = pElement1->GetEdge(i)->GetNode(1);
+            bool split_edge_found = false;
+            for (unsigned int j=0; j<old_split_edges.size(); ++j)
+            {
+                auto old_edge = this->mEdges[oldIds[old_split_edges[j]]];
+                if (old_edge->ContainsNode(node_1)||old_edge->ContainsNode(node_2))
+                {
+                    edge_mapping_1[i] = old_split_edges[j];
+                    edge_status_1[i] = 1;
+                    counter_1++;
+                    split_edge_found = true;
+                    thetas_1[i] = pElement1->GetEdge(i)->rGetLength()/old_edge->rGetLength();
+                }
+            }
+            if (!split_edge_found)
+            {
+                edge_mapping_1[i] = -1;
+                edge_status_1[i] = 2;
+                counter_1++;
+            }
+        }
+    }
+
+    for (unsigned int i=0; i<n_edges_2; ++i)
+    {
+        if (edge_mapping_2[i]==-2)
+        {
+            auto node_1 = pElement2->GetEdge(i)->GetNode(0);
+            auto node_2 = pElement2->GetEdge(i)->GetNode(1);
+            bool split_edge_found = false;
+            for (unsigned int j=0; j<old_split_edges.size(); ++j)
+            {
+                auto old_edge = this->mEdges[oldIds[old_split_edges[j]]];
+                if (old_edge->ContainsNode(node_1)||old_edge->ContainsNode(node_2))
+                {
+                    edge_mapping_2[i] = old_split_edges[j];
+                    edge_status_2[i] = 1;
+                    counter_2++;
+                    split_edge_found = true;
+                    thetas_2[i] = pElement2->GetEdge(i)->rGetLength()/old_edge->rGetLength();
+                }
+            }
+            if (!split_edge_found)
+            {
+                edge_mapping_2[i] = -1;
+                edge_status_2[i] = 2;
+                counter_2++;
+            }
+        }
+    }
+    //Checking if all edges of daughter cells have been mapped.
+    assert(counter_1==n_edges_1);
+    assert(counter_2==n_edges_2);
+
+    EdgeRemapInfo* remap_info_1 = new EdgeRemapInfo(edge_mapping_1, edge_status_1);
+    EdgeRemapInfo* remap_info_2 = new EdgeRemapInfo(edge_mapping_2, edge_status_2);
+    remap_info_1->SetSplitProportions(thetas_1);
+    remap_info_2->SetSplitProportions(thetas_2);
+    this->mEdges.InsertCellDivideOperation(pElement1->GetIndex(), pElement2->GetIndex(), remap_info_1, remap_info_2);
+}
+
+template<unsigned ELEMENT_DIM, unsigned SPACE_DIM>
+void MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::RecordNewEdgeOperation(const std::vector<unsigned int>& oldIds,
+                                                                       VertexElement<ELEMENT_DIM,SPACE_DIM>* pElement,
+                                                                       const unsigned int edge_index)
+{
+    const unsigned int element_index = pElement->GetIndex();
+    const unsigned int n_edges = pElement->GetNumEdges();
+    std::vector<long> edge_mapping(n_edges,0);
+    std::vector<unsigned int> edge_status(n_edges);
+    for (unsigned int i=0; i<edge_index; ++i)
+    {
+        edge_mapping[i] = i;
+        edge_status[i] = 0;
+    }
+    edge_mapping[edge_index] = -1;
+    edge_status[edge_index] = 2;
+    for (unsigned int i=edge_index+1; i<n_edges; ++i)
+    {
+        edge_mapping[i] = i-1;
+        edge_status[i] = 0;
+    }
+    EdgeRemapInfo* remap_info = new EdgeRemapInfo(edge_mapping, edge_status);
+    this->mEdges.InsertAddEdgeOperation(element_index, remap_info);
+}
 
 // Explicit instantiation
 template class MutableVertexMesh<1,1>;

@@ -33,61 +33,31 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
-#ifndef EDGEREMAPINFO_HPP_
-#define EDGEREMAPINFO_HPP_
+#ifndef VERTEXBASEDPOPULATIONSRN_HPP_
+#define VERTEXBASEDPOPULATIONSRN_HPP_
 
-#include <vector>
+#include <VertexBasedCellPopulation.hpp>
+#include "ChasteSerialization.hpp"
+#include "SrnCellModel.hpp"
+#include "EdgeRemapInfo.hpp"
+#include "EdgeOperation.hpp"
+template <unsigned DIM>
+class VertexBasedCellPopulation;
 
-/**
- * Storage class contains a mapping to the old local edges index during cell division.
- *
- */
-class EdgeRemapInfo {
-
-    /**
-     * Contains a mapping to the old local edges index. Negative value means a new edge
-     *
-     */
-    std::vector<long int> mEdgesMapping;
-
-    /**
-     * Status
-     * 0 Edge has not changed
-     * 1 Edge has been split between two elements
-     * 2 Completely new edge was created
-     */
-    std::vector<unsigned int> mEdgeStatus;
-
-    /**
-     * Determines how close the new node on the split edges is to the previous (lower) node
-     * Value of 0 means the new node is at the same position as the lower node,
-     * and value of 1 means that its at the upper node of the edge to be split.
-     */
-    std::vector<double> mSplitProportions;
+template <unsigned DIM>
+class VertexBasedPopulationSrn
+{
+private:
+    VertexBasedCellPopulation<DIM>* mpCellPopulation;
 public:
+    VertexBasedPopulationSrn();
+    void SetVertexCellPopulation(VertexBasedCellPopulation<DIM>* p_vertex_population);
 
-    EdgeRemapInfo(const std::vector<long int> &edgesMapping, const std::vector<unsigned int> &edgesStatus);
+    void UpdateSrnAfterBirthOrDeath();
 
-    /**
-     * Contains a mapping to the old local edges index. Negative value means a new edge
-     *
-     */
-    std::vector<long int> GetEdgesMapping() const;
-
-    /**
-     * Status
-     * 0 Edge has not changed
-     * 1 Edge has been split between two elements
-     * 2 Completely new edge was created
-     */
-    std::vector<unsigned int> GetEdgesStatus() const;
-
-    /**
-     *
-     */
-    std::vector<double> GetSplitProportions() const;
-    void SetSplitProportions(const std::vector<double> thetas);
+    void RemapCellSrn(std::vector<AbstractSrnModelPtr> parent_srn_edges,
+                             SrnCellModel* pSrnCell_1,
+                             EdgeRemapInfo* pEdgeChange_1);
 };
 
-
-#endif //EDGEREMAPINFO_HPP_
+#endif /* VERTEXBASEDPOPULATIONSRN_HPP_ */

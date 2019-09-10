@@ -265,10 +265,17 @@ public:
      */
     bool HasEdgeModel() const;
 
-    /*
+    /**
      * Sets this model to be part of an edge based SRN
      */
     void SetEdgeModelIndicator(const bool indicator);
+
+    /**
+     * Scales srn variables by factor theta
+     */
+    virtual void ScaleSrnVariables(const double theta);
+
+    virtual void AddSrnQuantities(AbstractSrnModel* p_other_srn);
 };
 
 CLASS_IS_ABSTRACT(AbstractSrnModel)

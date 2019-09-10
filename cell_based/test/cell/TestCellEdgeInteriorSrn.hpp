@@ -115,8 +115,8 @@ public:
             std::vector<double> interior_delta(4);
             std::vector<double> interior_notch(4);
             p_cell->GetCellEdgeData()->SetItem("neighbour delta", neigbour_delta);
-            p_cell->GetCellEdgeData()->SetItem("interior delta", interior_delta);
-            p_cell->GetCellEdgeData()->SetItem("interior notch", interior_notch);
+            p_cell->GetCellData()->SetItem("interior delta", 0);
+            p_cell->GetCellData()->SetItem("interior notch", 0);
             p_cell->InitialiseCellCycleModel();
             p_cell->InitialiseSrnModel();
 
@@ -214,8 +214,8 @@ public:
                 CellPtr p_cell(new Cell(p_healthy_state, p_cc_model, p_srn_model));
                 p_cell->SetCellProliferativeType(p_transit_type);
                 p_cell->GetCellEdgeData()->SetItem("neighbour delta", std::vector<double>{10.0, 10.0, 10.0, 10.0});
-                p_cell->GetCellEdgeData()->SetItem("interior delta", std::vector<double>{5.0, 5.0, 5.0, 5.0});
-                p_cell->GetCellEdgeData()->SetItem("interior notch", std::vector<double>{1.0, 1.0, 1.0, 1.0});
+                p_cell->GetCellData()->SetItem("interior delta", 5.0);
+                p_cell->GetCellData()->SetItem("interior notch", 1.0);
                 p_cell->InitialiseCellCycleModel();
                 p_cell->InitialiseSrnModel();
                 p_cell->SetBirthTime(0.0);
@@ -366,8 +366,8 @@ public:
                     std::vector<double> initial_conditions;
 
                     /* Initial concentration of delta and notch is the same */
-                    initial_conditions.push_back(i);
-                    initial_conditions.push_back(i);
+                    initial_conditions.push_back(2.0);
+                    initial_conditions.push_back(2.0);
 
                     MAKE_PTR(DeltaNotchSrnEdgeModel, p_srn_model);
                     p_srn_model->SetInitialConditions(initial_conditions);
@@ -396,10 +396,8 @@ public:
                 p_cell->ReadyToDivide();
                 auto p_new_cell = p_cell->Divide();
                 cell_population.AddCell(p_new_cell, p_cell);
+                cell_population.Update(true);
             }
-
-            /* Apply the edge changes to the cell's SRN models */
-            p_modifier->UpdateCellSrnLayout(cell_population);
 
             /* We should now have 5 cells after the divide*/
             TS_ASSERT_EQUALS(cell_population.GetNumAllCells(), 5);
@@ -460,8 +458,8 @@ public:
             std::vector<double> interior_notch = {1.0, 1.0, 1.0, 1.0};
 
             p_cell->GetCellEdgeData()->SetItem("neighbour delta", neigbour_delta);
-            p_cell->GetCellEdgeData()->SetItem("interior delta", interior_delta);
-            p_cell->GetCellEdgeData()->SetItem("interior notch", interior_notch);
+            p_cell->GetCellData()->SetItem("interior delta", 1.0);
+            p_cell->GetCellData()->SetItem("interior notch", 1.0);
             p_cell->GetCellData()->SetItem("total neighbour edge delta", 4.0);
             p_cell->GetCellData()->SetItem("total edge notch", 2.0);
             p_cell->InitialiseCellCycleModel();
@@ -578,8 +576,8 @@ public:
                 CellPtr p_cell(new Cell(p_healthy_state, p_cc_model, p_srn_model));
                 p_cell->SetCellProliferativeType(p_transit_type);
                 p_cell->GetCellEdgeData()->SetItem("neighbour delta", std::vector<double>{10.0, 10.0, 10.0, 10.0});
-                p_cell->GetCellEdgeData()->SetItem("interior delta", std::vector<double>{5.0, 5.0, 5.0, 5.0});
-                p_cell->GetCellEdgeData()->SetItem("interior notch", std::vector<double>{1.0, 1.0, 1.0, 1.0});
+                p_cell->GetCellData()->SetItem("interior delta", 5.0);
+                p_cell->GetCellData()->SetItem("interior notch", 1.0);
                 p_cell->GetCellData()->SetItem("total neighbour edge delta", 40.0);
                 p_cell->GetCellData()->SetItem("total edge notch", 4.0);
                 p_cell->InitialiseCellCycleModel();
@@ -777,6 +775,7 @@ public:
                 p_cell->ReadyToDivide();
                 auto p_new_cell = p_cell->Divide();
                 cell_population.AddCell(p_new_cell, p_cell);
+                cell_population.Update(true);
             }
 
             /* Apply the edge changes to the cell's SRN models */
@@ -793,18 +792,34 @@ public:
                 auto p_cell_edge_srn = static_cast<SrnCellModel*>(p_cell->GetSrnModel());
                 TS_ASSERT(p_cell_edge_srn->GetInteriorSrn() != nullptr);
                 TS_ASSERT_EQUALS(p_cell_edge_srn->GetNumEdgeSrn(), 5);
-
-                //auto p_interior_new_srn
-                //= boost::static_pointer_cast<DeltaNotchSrnInteriorModel>(static_cast<SrnCellModel*>(p_cell_edge_srn)->GetInteriorSrn());
-
             }
-
             /* Check the 4th cell */
             {
                 auto p_cell = cell_population.GetCellUsingLocationIndex(4);
                 auto p_cell_edge_srn = static_cast<SrnCellModel*>(p_cell->GetSrnModel());
                 TS_ASSERT(p_cell_edge_srn->GetInteriorSrn() != nullptr);
                 TS_ASSERT_EQUALS(p_cell_edge_srn->GetNumEdgeSrn(), 5);
+            }
+            /* Check interior SRN variable split in half*/
+            {
+                auto p_cell_1 = cell_population.GetCellUsingLocationIndex(0);
+                auto p_cell_2 = cell_population.GetCellUsingLocationIndex(4);
+                auto p_cell_srn_1 = static_cast<SrnCellModel*>(p_cell_1->GetSrnModel());
+                auto p_cell_srn_2 = static_cast<SrnCellModel*>(p_cell_2->GetSrnModel());
+                TS_ASSERT(p_cell_srn_1->GetInteriorSrn() != nullptr);
+                TS_ASSERT(p_cell_srn_2->GetInteriorSrn() != nullptr);
+                auto interior_srn_1
+                = boost::static_pointer_cast<DeltaNotchSrnInteriorModel>(static_cast<SrnCellModel*>(p_cell_srn_1)->GetInteriorSrn());
+                auto interior_srn_2
+                = boost::static_pointer_cast<DeltaNotchSrnInteriorModel>(static_cast<SrnCellModel*>(p_cell_srn_2)->GetInteriorSrn());
+                const double delta_1 = interior_srn_1->GetDelta();
+                const double delta_2 = interior_srn_2->GetDelta();
+                const double notch_1 = interior_srn_1->GetNotch();
+                const double notch_2 = interior_srn_2->GetNotch();
+                TS_ASSERT_DELTA(delta_1, delta_2,1e-12);
+                TS_ASSERT_DELTA(notch_1, notch_2,1e-12);
+                TS_ASSERT_DELTA(delta_1,2.0,1e-12);
+                TS_ASSERT_DELTA(notch_1,2.0,1e-12);
             }
         }
 

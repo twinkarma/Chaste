@@ -76,6 +76,7 @@ VertexBasedCellPopulation<DIM>::VertexBasedCellPopulation(MutableVertexMesh<DIM,
     {
         Validate();
     }
+    mPopulationSrn.SetVertexCellPopulation(this);
 }
 
 template<unsigned DIM>
@@ -236,7 +237,6 @@ CellPtr VertexBasedCellPopulation<DIM>::AddCell(CellPtr pNewCell, CellPtr pParen
 
     // Divide the element
     unsigned new_element_index = mpMutableVertexMesh->DivideElementAlongGivenAxis(p_element, division_vector, true);
-
     // Associate the new cell with the element
     this->mCells.push_back(pNewCell);
 
@@ -346,6 +346,9 @@ void VertexBasedCellPopulation<DIM>::Update(bool hasHadBirthsOrDeaths)
         // Check that each VertexElement has only one CellPtr associated with it in the updated cell population
         Validate();
     }
+    bool EdgeModelOrNot = (*this->mCells.begin())->GetSrnModel()->HasEdgeModel();
+    if (hasHadBirthsOrDeaths&&EdgeModelOrNot)
+        mPopulationSrn.UpdateSrnAfterBirthOrDeath();
 
     element_map.ResetToIdentity();
 }
@@ -608,8 +611,6 @@ void VertexBasedCellPopulation<DIM>::WriteCellEdgeVtkResultsToFile(const std::st
     std::vector<std::vector<double> > data_values(n_data_items,
                                                   std::vector<double>(num_edges + n_cells));
 
-
-
     // Writing CellEdgeData values to the edges of the cells
     // Loop over vertex elements ///\todo #2512 - replace with loop over cells
     for (auto elem_iter = mpMutableVertexMesh->GetElementIteratorBegin();
@@ -632,7 +633,6 @@ void VertexBasedCellPopulation<DIM>::WriteCellEdgeVtkResultsToFile(const std::st
             data_values[var][cell_offset_dist[elem_index]+elem_num_edges] = 0.0;
         }
     }
-
 
     // Writing CellData values to the interior of the cells
     // Loop over vertex elements ///\todo #2512 - replace with loop over cells

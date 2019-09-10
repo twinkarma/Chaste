@@ -53,7 +53,7 @@ void AbstractSrnModel::InitialiseDaughterCell()
 }
 
 AbstractSrnModel::AbstractSrnModel(const AbstractSrnModel& rModel)
-    : mSimulatedToTime(rModel.GetSimulatedToTime())
+    : mSimulatedToTime(rModel.GetSimulatedToTime()), mIsEdgeBasedModel(rModel.mIsEdgeBasedModel)
 {
     /*
      * Set each member variable of the new SRN model that inherits
@@ -139,4 +139,12 @@ bool AbstractSrnModel::HasEdgeModel() const
 void AbstractSrnModel::SetEdgeModelIndicator(const bool indicator)
 {
     this->mIsEdgeBasedModel = indicator;
+}
+
+void AbstractSrnModel::ScaleSrnVariables(const double theta)
+{
+}
+
+void AbstractSrnModel::AddSrnQuantities(AbstractSrnModel* p_other_srn)
+{
 }
