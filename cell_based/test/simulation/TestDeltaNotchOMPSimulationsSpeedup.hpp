@@ -119,7 +119,7 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /* Having included all the necessary header files, we proceed by defining the test class.
  */
-class TestRunningDeltaNotchOMPSimulationsTutorial : public AbstractCellBasedTestSuite
+class TestDeltaNotchOMPSimulationsSpeedup : public AbstractCellBasedTestSuite
 {
 public:
 
@@ -209,11 +209,11 @@ public:
 
         return duration.count();
 
-
     }
 
     long RunOMPSimulation(unsigned num_x_cells, unsigned num_y_cells, double end_time, std::string output_dir)
     {
+
         // Define the seed
         RandomNumberGenerator::Instance()->Reseed(0);
 
@@ -302,22 +302,17 @@ public:
         EXIT_IF_PARALLEL;
 
         double end_time = 1.0;
-        std::vector<unsigned> cell_sizes = {2, 5, 10, 100};
+        std::vector<unsigned> cell_sizes = {2, 5, 10};
 
         for ( auto cell_size: cell_sizes )
         {
-            auto standard_duration = this->RunStandardSimulation(cell_size, cell_size, end_time, std::string("TestRunningDeltaNotchOMPSimulationsTutorial"));
-            auto omp_duration = this->RunOMPSimulation(cell_size, cell_size, end_time, std::string("TestRunningDeltaNotchOMPSimulationsTutorial"));
+            auto standard_duration = this->RunStandardSimulation(cell_size, cell_size, end_time, std::string("TestDeltaNotchOMPSimulationsSpeedup"));
+            auto omp_duration = this->RunOMPSimulation(cell_size, cell_size, end_time, std::string("TestDeltaNotchOMPSimulationsSpeedup"));
             auto duration_diff = (float)standard_duration/(float)omp_duration;
 
             cout << "Grid size " << cell_size << "x" << cell_size << " Non-OMP: " << standard_duration << "ms, OMP: " << omp_duration << "ms. Speedup of " << duration_diff << "\n";
 
         }
-
-
-
-
-
 
     }
 
