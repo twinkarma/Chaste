@@ -38,6 +38,7 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "LogFile.hpp"
 #include "UblasCustomFunctions.hpp"
 #include "Warnings.hpp"
+#include "OpenMPCheck.hpp"
 
 template<unsigned ELEMENT_DIM, unsigned SPACE_DIM>
 MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::MutableVertexMesh(std::vector<Node<SPACE_DIM>*> nodes,
@@ -1015,9 +1016,11 @@ bool MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::CheckForT2Swaps(VertexElementMap
 template<unsigned ELEMENT_DIM, unsigned SPACE_DIM>
 bool MutableVertexMesh<ELEMENT_DIM, SPACE_DIM>::CheckForIntersections()
 {
-#ifdef OPENMP
-    return CheckForIntersectionsOMP();
-#endif
+    if (DoUseOMP())
+    {
+        return CheckForIntersectionsOMP();
+    }
+
 
     // If checking for internal intersections as well as on the boundary, then check that no nodes have overlapped any elements...
     if (mCheckForInternalIntersections)

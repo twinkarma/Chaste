@@ -21,7 +21,6 @@
 #include "HoneycombVertexMeshGenerator.hpp"
 
 #include "FarhadifarForce.hpp"
-#include "FarhadifarForceOMP.hpp"
 
 
 #include "AbstractCellBasedTestSuite.hpp"
@@ -45,6 +44,11 @@ public:
 
     void TestFarhadifarForceOMP()
     {
+        #ifndef _OPENMP
+        TS_FAIL("OpenMP not used");
+        return;
+        #endif
+
         std::vector<c_vector<double, 2> > applied_forces(6);
         {
             /**
@@ -181,7 +185,7 @@ public:
             p_growth_modifier->UpdateTargetAreas(cell_population);
 
             // Now let's make a FarhadifarForce and apply it to the population
-            FarhadifarForceOMP<2> force;
+            FarhadifarForce<2> force;
 
             force.AddForceContribution(cell_population);
 
@@ -209,6 +213,11 @@ public:
 
     void TestFarhadifarForceOMPPopulationSpeedUp()
     {
+        #ifndef _OPENMP
+        TS_FAIL("OpenMP not used");
+        return;
+        #endif
+
         const unsigned int n_x_cells = 100;
         const unsigned int n_y_cells = 100;
         std::vector<c_vector<double,2> > applied_force;
@@ -277,7 +286,7 @@ public:
             p_growth_modifier->UpdateTargetAreas(cell_population);
 
             // Now let's make a FarhadifarForce and apply it to the population
-            FarhadifarForceOMP<2> force;
+            FarhadifarForce<2> force;
             std::clock_t c_start = std::clock();
             auto t_start = std::chrono::high_resolution_clock::now();
             force.AddForceContribution(cell_population);
@@ -304,6 +313,11 @@ public:
 
     void TestFarhadifarForceOMPMethods()
     {
+        #ifndef _OPENMP
+        TS_FAIL("OpenMP not used");
+        return;
+        #endif
+
         // This is the same test as for other vertex based forces. It comprises a sanity check that forces point in the right direction.
         // Construct a 2D vertex mesh consisting of a single element
         std::vector<Node<2>*> nodes;
@@ -339,7 +353,7 @@ public:
         cell_population.InitialiseCells();
 
         // Create a force system
-        FarhadifarForceOMP<2> force;
+        FarhadifarForce<2> force;
 
         // Test get/set methods
         TS_ASSERT_DELTA(force.GetAreaElasticityParameter(), 1.0, 1e-12);
@@ -370,7 +384,7 @@ public:
         // Currently, the Farhadifar force only works if used together with a target area growth modifier
         // This tests that a meaningful error appears if we don't use a growth modifier
         TS_ASSERT_THROWS_THIS(force.AddForceContribution(cell_population),
-                              "You need to add an AbstractTargetAreaModifier to the simulation in order to use a FarhadifarForceOMP");
+                              "You need to add an AbstractTargetAreaModifier to the simulation in order to use a FarhadifarForce");
 
         // create our modifier, which sets the target areas for the cell population
 
@@ -442,6 +456,11 @@ public:
 
     void TestFarhadifarForceOMPTerms()
     {
+        #ifndef _OPENMP
+        TS_FAIL("OpenMP not used");
+        return;
+        #endif
+
         /**
          * Here we test that the forces are applied correctly to individual nodes.
          * We apply the force to something like this:
@@ -497,8 +516,8 @@ public:
         MAKE_PTR(SimpleTargetAreaModifier<2>,p_growth_modifier);
         p_growth_modifier->UpdateTargetAreas(cell_population);
 
-        // Now let's make a FarhadifarForceOMP and apply it to the population
-        FarhadifarForceOMP<2> force;
+        // Now let's make a FarhadifarForce and apply it to the population
+        FarhadifarForce<2> force;
 
         force.AddForceContribution(cell_population);
 
@@ -516,6 +535,11 @@ public:
 
     void TestFarhadifarForceOMPInSimulation()
     {
+        #ifndef _OPENMP
+        TS_FAIL("OpenMP not used");
+        return;
+        #endif
+
         /**
          * This is the same test as above, just that now we don't check that the applied forces are calculated correctly,
          * but rather that in a simulation the displacement of vertices is as we expect.
@@ -573,15 +597,15 @@ public:
         MAKE_PTR(SimpleTargetAreaModifier<2>,p_growth_modifier);
         p_growth_modifier->UpdateTargetAreas(cell_population);
 
-        // Now let's make a FarhadifarForceOMP and add it to the simulation.
-        MAKE_PTR(FarhadifarForceOMP<2>, p_force);
+        // Now let's make a FarhadifarForce and add it to the simulation.
+        MAKE_PTR(FarhadifarForce<2>, p_force);
 
         // We need to reset the cell rearrangement threshold - vertex movements are kept below that threshold
         cell_population.rGetMesh().SetCellRearrangementThreshold(0.5);
 
         // Set up cell-based simulation
         OffLatticeSimulation<2> simulator(cell_population);
-        simulator.SetOutputDirectory("TestFarhadifarForceOMP");
+        simulator.SetOutputDirectory("TestFarhadifarForce");
         simulator.SetEndTime(0.01);
         simulator.SetDt(0.01);
         simulator.AddForce(p_force);
@@ -609,12 +633,17 @@ public:
 
     void TestFarhadifarForceOMPArchiving()
     {
+        #ifndef _OPENMP
+        TS_FAIL("OpenMP not used");
+        return;
+        #endif
+
         EXIT_IF_PARALLEL; // Beware of processes overwriting the identical archives of other processes
         OutputFileHandler handler("archive", false);
-        std::string archive_filename = handler.GetOutputDirectoryFullPath() + "FarhadifarForceOMP.arch";
+        std::string archive_filename = handler.GetOutputDirectoryFullPath() + "FarhadifarForce.arch";
 
         {
-            FarhadifarForceOMP<2> force;
+            FarhadifarForce<2> force;
 
             std::ofstream ofs(archive_filename.c_str());
             boost::archive::text_oarchive output_arch(ofs);
@@ -640,7 +669,7 @@ public:
             // Restore from the archive
             input_arch >> p_abstract_force;
 
-            FarhadifarForceOMP<2>* p_farhadifar_force = static_cast<FarhadifarForceOMP<2>*>(p_abstract_force);
+            FarhadifarForce<2>* p_farhadifar_force = static_cast<FarhadifarForce<2>*>(p_abstract_force);
 
             // Check member variables have been correctly archived
             TS_ASSERT_DELTA(p_farhadifar_force->GetAreaElasticityParameter(), 5.8, 1e-12);

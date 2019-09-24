@@ -63,7 +63,7 @@ public:
       */
     void TestRemesh3dMoveNodes()
     {
-#ifndef OPENMP
+#ifndef _OPENMP
         TS_FAIL("OpenMP not used");
         return;
 #endif
@@ -148,7 +148,7 @@ public:
 
     void TestRemeshWithMethod1D()
     {
-#ifndef OPENMP
+#ifndef _OPENMP
         TS_FAIL("OpenMP not used");
         return;
 #endif
@@ -332,7 +332,7 @@ public:
 
     void TestRemeshWithMethod2D()
     {
-#ifndef OPENMP
+#ifndef _OPENMP
         TS_FAIL("OpenMP not used");
         return;
 #endif
@@ -400,7 +400,7 @@ public:
 
     void TestRemeshWithMethod3D()
     {
-#ifndef OPENMP
+#ifndef _OPENMP
         TS_FAIL("OpenMP not used");
         return;
 #endif
@@ -444,7 +444,7 @@ public:
 
     void TestNodeMap()
     {
-#ifndef OPENMP
+#ifndef _OPENMP
         TS_FAIL("OpenMP not used");
         return;
 #endif
@@ -475,7 +475,7 @@ public:
 
     void Test1DReMeshFailsAfterEnoughDeletions()
     {
-#ifndef OPENMP
+#ifndef _OPENMP
         TS_FAIL("OpenMP not used");
         return;
 #endif
@@ -514,7 +514,7 @@ public:
 
     void Test2DReMeshFailsAfterEnoughDeletions()
     {
-#ifndef OPENMP
+#ifndef _OPENMP
         TS_FAIL("OpenMP not used");
         return;
 #endif
@@ -543,7 +543,7 @@ public:
 
     void TestRawTriangleLibraryCall()
     {
-#ifndef OPENMP
+#ifndef _OPENMP
         TS_FAIL("OpenMP not used");
         return;
 #endif
@@ -602,7 +602,7 @@ public:
 
     void TestRawTetgenLibraryCall()
     {
-#ifndef OPENMP
+#ifndef _OPENMP
         TS_FAIL("OpenMP not used");
         return;
 #endif
@@ -657,7 +657,7 @@ public:
 
     void TestRemeshWithLibraryMethodSimple()
     {
-#ifndef OPENMP
+#ifndef _OPENMP
         TS_FAIL("OpenMP not used");
         return;
 #endif
@@ -695,7 +695,7 @@ public:
 
     void TestRemeshWithLibraryMethod2D()
     {
-#ifndef OPENMP
+#ifndef _OPENMP
         TS_FAIL("OpenMP not used");
         return;
 #endif
@@ -736,7 +736,7 @@ public:
 
     void TestRemeshWithLibraryMethod3D()
     {
-#ifndef OPENMP
+#ifndef _OPENMP
         TS_FAIL("OpenMP not used");
         return;
 #endif
@@ -777,7 +777,7 @@ public:
 
     void TestSplitLongEdges()
     {
-#ifndef OPENMP
+#ifndef _OPENMP
         TS_FAIL("OpenMP not used");
         return;
 #endif
