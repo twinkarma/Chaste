@@ -67,28 +67,12 @@ template<unsigned DIM>
 void AbstractTargetAreaModifier<DIM>::UpdateTargetAreas(AbstractCellPopulation<DIM,DIM>& rCellPopulation)
 {
     // Loop over the list of cells, rather than using the population iterator, so as to include dead cells
-    #pragma omp parallel
-    #pragma omp single
+    for (std::list<CellPtr>::iterator cell_iter = rCellPopulation.rGetCells().begin();
+         cell_iter != rCellPopulation.rGetCells().end();
+         ++cell_iter)
     {
-        for (std::list<CellPtr>::iterator cell_iter = rCellPopulation.rGetCells().begin();
-             cell_iter != rCellPopulation.rGetCells().end();
-             ++cell_iter)
-        {
-            #pragma omp task firstprivate(cell_iter)
-            UpdateTargetAreaOfCell(*cell_iter);
-        }
-
-        #pragma omp taskwait
+        UpdateTargetAreaOfCell(*cell_iter);
     }
-
-
-
-//    for (std::list<CellPtr>::iterator cell_iter = rCellPopulation.rGetCells().begin();
-//         cell_iter != rCellPopulation.rGetCells().end();
-//         ++cell_iter)
-//    {
-//        UpdateTargetAreaOfCell(*cell_iter);
-//    }
 }
 
 template<unsigned DIM>

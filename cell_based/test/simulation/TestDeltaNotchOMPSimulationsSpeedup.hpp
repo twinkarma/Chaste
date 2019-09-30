@@ -215,26 +215,21 @@ public:
 
     }
 
-    void TestVertexBasedMonolayerWithDeltaNotch()
+    void TestSimulationSpeedup()
     {
         /* We include the next line because Vertex simulations cannot be run in parallel */
         EXIT_IF_PARALLEL;
 
         double end_time = 1.0;
         std::vector<unsigned> cell_sizes = {2, 5, 10, 25};
-        cell_sizes = {25};
 
         for ( auto cell_size: cell_sizes )
         {
-
             UseOMP(false);
             auto standard_duration = this->RunSimulation(cell_size, cell_size, end_time, std::string("TestDeltaNotchOMPSimulationsSpeedup"));
 
-
-//            UseOMP(true);
-//            auto omp_duration = this->RunSimulation(cell_size, cell_size, end_time, std::string("TestDeltaNotchOMPSimulationsSpeedup"));
-            auto omp_duration = 1;
-
+            UseOMP(true);
+            auto omp_duration = this->RunSimulation(cell_size, cell_size, end_time, std::string("TestDeltaNotchOMPSimulationsSpeedup"));
 
             auto duration_diff = (float)standard_duration/(float)omp_duration;
 
