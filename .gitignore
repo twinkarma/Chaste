@@ -58,3 +58,5 @@ _local/
 /apps/src/MeshConvert
 
 \.vscode/
+
+.idea/
